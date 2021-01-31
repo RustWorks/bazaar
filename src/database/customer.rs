@@ -66,7 +66,7 @@ impl CustomerRepository for CustomerDatabase {
         Ok(customer)
     }
 
-    #[tracing::instrument(skip(pool), fields(repository = "customer"))]
+    #[tracing::instrument(skip(pool, email), fields(repository = "customer"))]
     async fn find_by_email(email: String, pool: &PgPool) -> Result<Customer> {
         let customer = query_as!(
             Customer,
@@ -92,12 +92,12 @@ impl CustomerRepository for CustomerDatabase {
 
         query!(
             r#"
-            INSERT INTO auth (public_id, id, password_hash, email)
+            INSERT INTO auth (public_id, id, hashed_password, email)
             VALUES ($1, $2, $3, $4)
         "#,
             customer.public_id,
             customer.private_id,
-            customer.password_hash,
+            customer.hashed_password,
             customer.email
         )
         .execute(&mut tx)

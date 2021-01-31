@@ -4,7 +4,7 @@ use serde::Serialize;
 use thiserror::Error;
 use tracing::error;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error, PartialEq, Clone)]
 pub enum BazaarError {
     #[error("Could not find resource")]
     NotFound,
@@ -33,14 +33,23 @@ pub enum BazaarError {
     #[error("Internal Server Error")]
     ServerError(String),
 
+    #[error("Internal Server Error")]
+    PoisonConcurrencyError(String),
+
     #[error("Unexpected error occurred")]
     UnexpectedError,
 
     #[error("Provided data was malformed")]
     MalformedData,
 
-    #[error("Unexpected error occurred")]
+    #[error(transparent)]
     CryptoError(#[from] argon2::Error),
+
+    #[error("Rand Error: {0}")]
+    RandError(String),
+
+    #[error(transparent)]
+    StrConversion(#[from] std::str::Utf8Error),
 }
 
 impl ErrorExtensions for BazaarError {
@@ -73,7 +82,7 @@ impl ErrorExtensions for BazaarError {
                 e.set("statusText", "SERVER_ERROR");
                 e.set("context", error.to_string());
             }
-            Self::UnexpectedError => {
+            Self::UnexpectedError | Self::PoisonConcurrencyError(_) => {
                 e.set("status", 500);
                 e.set("statusText", "SERVER_ERROR");
             }
@@ -148,5 +157,16 @@ impl From<tokio::task::JoinError> for BazaarError {
             "Tokio task join error occurred"
         );
         BazaarError::UnexpectedError
+    }
+}
+
+impl From<rand::Error> for BazaarError {
+    fn from(e: rand::Error) -> BazaarError {
+        error!(
+            err = ?e,
+            error_code = ?e.code(),
+            "Received Rand error"
+        );
+        BazaarError::RandError(e.to_string())
     }
 }

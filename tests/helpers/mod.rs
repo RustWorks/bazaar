@@ -6,7 +6,6 @@ mod env_vars;
 mod graphql;
 mod math;
 mod reqwest;
-mod tokens;
 mod types;
 
 pub use self::reqwest::*;
@@ -16,14 +15,12 @@ pub use database::*;
 pub use env_vars::set_env_vars_for_tests;
 pub use graphql::parse_graphql_response;
 pub use math::assert_on_decimal;
-pub use tokens::*;
 pub use types::*;
 
 use lazy_static::lazy_static;
-use serde_json::json;
-use uuid::Uuid;
-
-use bazaar::telemetry::{generate_subscriber, init_subscriber};
+use tracing::subscriber::set_global_default;
+use tracing_log::LogTracer;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
 
 lazy_static! {
     /// To ensure logs are only outputted in tests when required, by default
@@ -35,17 +32,13 @@ lazy_static! {
         let filter = if std::env::var("TEST_LOG").is_ok() {
             "debug"
         } else {
-            ""
+            "100"
         };
-        let subscriber = generate_subscriber("test".to_string(), filter.into());
-        init_subscriber(subscriber);
-    };
-
-    pub static ref DEFAULT_CUSTOMER: serde_json::Value = {
-        json!({
-            "email": format!("{}@test.com", Uuid::nil()),
-            "firstName": Uuid::nil(),
-            "lastName": Uuid::nil()
-        })
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(filter));
+    LogTracer::init().expect("failed to attach logs to tracing");
+    let registry = Registry::default()
+        .with(env_filter);
+        set_global_default(registry).unwrap();
     };
 }
